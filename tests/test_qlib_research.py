@@ -13,6 +13,24 @@ class QlibResearchTests(unittest.TestCase):
                 test_start="2022-01-01", test_end="2023-01-01",
             )
 
+    def test_rejects_equal_inclusive_segment_boundaries(self):
+        with self.assertRaisesRegex(ValueError, "strictly chronological"):
+            run_experiment(
+                provider_uri="/unused",
+                train_start="2010-01-01", train_end="2018-12-31",
+                valid_start="2018-12-31", valid_end="2020-12-31",
+                test_start="2021-01-01", test_end="2024-01-01",
+            )
+
+    def test_rejects_invalid_date_strings(self):
+        with self.assertRaisesRegex(ValueError, "valid dates"):
+            run_experiment(
+                provider_uri="/unused",
+                train_start="not-a-date", train_end="2018-12-31",
+                valid_start="2019-01-01", valid_end="2020-12-31",
+                test_start="2021-01-01", test_end="2024-01-01",
+            )
+
     def test_rejects_invalid_top_k(self):
         with self.assertRaisesRegex(ValueError, "top_k"):
             run_experiment(
