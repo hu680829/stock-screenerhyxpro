@@ -101,8 +101,20 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
         raise ValueError("top_k must be positive")
     if cost_bps < 0:
         raise ValueError("cost_bps must be non-negative")
-    if not (train_start < train_end <= valid_start < valid_end <= test_start < test_end):
-        raise ValueError("date segments must be chronological and non-overlapping")
+    # Parse dates instead of comparing strings. Qlib segment endpoints are
+    # inclusive, so equal boundaries can leak observations across segments.
+    try:
+        parsed_dates = [pd.Timestamp(value) for value in
+                        (train_start, train_end, valid_start, valid_end, test_start, test_end)]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("all segment boundaries must be valid dates") from exc
+    if any(pd.isna(value) for value in parsed_dates):
+        raise ValueError("all segment boundaries must be valid dates")
+    if not all(left < right for left, right in zip(parsed_dates, parsed_dates[1:])):
+        raise ValueError(
+            "date segments must be strictly chronological with gaps between inclusive "
+            "train/validation/test boundaries"
+        )
     try:
         import qlib
         from qlib.constant import REG_US
