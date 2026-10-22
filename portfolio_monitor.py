@@ -47,7 +47,16 @@ def calculate_snapshot(close_prices: pd.DataFrame, target_weights: Mapping[str, 
     # substitute another date or calculate a partial portfolio.
     shared = data.dropna(subset=list(required))
     if len(shared) < 2:
-        raise ValueError("Fewer than two shared valid sessions for all holdings and USD/CNH")
+        latest_by_ticker = {
+            str(ticker): (str(data[ticker].last_valid_index())
+                          if data[ticker].last_valid_index() is not None else "no valid data")
+            for ticker in sorted(required)
+        }
+        raise ValueError(
+            "Fewer than two shared valid sessions for all holdings and USD/CNH; "
+            f"shared_rows={len(shared)}, latest_valid_by_ticker={latest_by_ticker}. "
+            "Check provider symbol coverage and increase the requested history window."
+        )
 
     previous = shared.iloc[-2]
     latest = shared.iloc[-1]
@@ -69,7 +78,7 @@ def calculate_snapshot(close_prices: pd.DataFrame, target_weights: Mapping[str, 
     return result
 
 
-def fetch_close_prices(period: str = "15d") -> pd.DataFrame:
+def fetch_close_prices(period: str = "60d") -> pd.DataFrame:
     try:
         import yfinance as yf
     except ImportError as exc:
