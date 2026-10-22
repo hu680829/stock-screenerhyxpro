@@ -27,7 +27,7 @@ class PortfolioMonitorTests(unittest.TestCase):
         idx = pd.to_datetime(["2026-10-20", "2026-10-21", "2026-10-22"])
         prices = pd.DataFrame({
             "AAPL": [100, 101, 102],
-            "NVDA": [200, None, 204],
+            "NVDA": [None, None, 204],
             "BTC-USD": [1000, 1010, 1020],
             "000300.SS": [4000, 4020, 4040],
             "SGOV": [100, 100.1, 100.2],
