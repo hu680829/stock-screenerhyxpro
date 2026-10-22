@@ -231,8 +231,7 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
     sensitivity.to_csv(output / "oos_cost_sensitivity.csv", index=False)
     observations.to_csv(output / "oos_predictions_and_labels.csv", index=False)
     (output / "oos_metrics.json").write_text(
-        json.dumps(_json_safe_metrics(metrics), indent=2, allow_nan=False) + "
-", encoding="utf-8")
+        json.dumps(_json_safe_metrics(metrics), indent=2, allow_nan=False) + "\n", encoding="utf-8")
     return metrics
 
 
