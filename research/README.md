@@ -33,3 +33,9 @@ See [QLIB_ALPHA158_GUIDE.md](QLIB_ALPHA158_GUIDE.md) and [train_qlib_alpha158.py
 The optional dependencies are only an environment declaration; this repository does **not** yet initialize Qlib, prepare Qlib-format market data, train a LightGBM model, or use model predictions in the production screener. Follow the official Qlib data-preparation and workflow instructions before attempting a benchmark. Keep train/validation/test periods chronologically separated, reserve a genuinely untouched test period, include transaction costs, and compare against a benchmark. Do not promote a model into the daily scan unless it passes reproducible tests and out-of-sample evaluation.
 
 Official project: https://github.com/microsoft/qlib
+
+## Which Microsoft components are actually being used?
+
+Qlib is a quantitative research platform, not a single stock-picking large language model. This repository currently uses its Alpha158 feature handler and LightGBM model API in an optional experiment. The useful Qlib practices adopted here are chronological train/validation/test splits, cross-sectional signal evaluation (rank IC), portfolio-level evaluation, transaction-cost sensitivity, and reproducible research outputs.
+
+Microsoft's separate RD-Agent-Quant project focuses on agent-driven factor mining and model/data iteration. It is not automatically included by installing Qlib, and blindly allowing an agent to rewrite factors without strict out-of-sample gates would risk overfitting. Treat RD-Agent integration as a later isolated experiment: candidate factors/models must pass walk-forward tests, multiple cost assumptions, benchmark comparisons, and reproducibility checks before promotion. No agent or LLM currently changes production rankings.
