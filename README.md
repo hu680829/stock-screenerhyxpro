@@ -47,6 +47,10 @@ Example:
 
 This is a simplified research backtest, not proof of a profitable edge. It does not yet correct for delisted securities, point-in-time universe membership, taxes, market impact, or all corporate-action/data issues. Use multiple market regimes, realistic costs, and out-of-sample tests before drawing conclusions.
 
+## Reusable portfolio-risk calculations
+
+`portfolio_risk.py` contains network-free, unit-tested helpers for FX-adjusted portfolio returns, normalized current weights, rebalance drift in percentage points, and proportional buy-budget caps. Missing holdings and invalid inputs fail closed. These are reusable calculation primitives; the daily screener currently does not fetch a live personal portfolio or send portfolio alerts through this module.
+
 ## Optional Qlib-inspired research layer
 
 See research/README.md and requirements-research.txt. Optional research dependencies are not installed by the daily workflow, and no Qlib model is used for production rankings.
