@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from research.train_qlib_alpha158 import run_experiment, _build_daily_portfolio, _cost_sensitivity
+from research.train_qlib_alpha158 import run_experiment, _build_daily_portfolio, _cost_sensitivity, _json_safe_metrics
 
 
 class QlibResearchTests(unittest.TestCase):
