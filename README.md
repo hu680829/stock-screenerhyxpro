@@ -49,7 +49,7 @@ This is a simplified research backtest, not proof of a profitable edge. It does 
 
 ## Reusable portfolio-risk calculations
 
-`portfolio_risk.py` contains network-free, unit-tested helpers for FX-adjusted portfolio returns, normalized current weights, rebalance drift in percentage points, and proportional buy-budget caps. Missing holdings and invalid inputs fail closed. These are reusable calculation primitives; the daily screener currently does not fetch a live personal portfolio or send portfolio alerts through this module.
+`portfolio_risk.py` contains network-free, unit-tested helpers for FX-adjusted portfolio returns, normalized current weights, rebalance drift in percentage points, and proportional buy-budget caps. Missing holdings and invalid inputs fail closed. `portfolio_monitor.py` now fetches daily closes for the configured holdings plus USD/CNH, requires at least two dates shared by every holding and FX series, calculates an FX-adjusted RMB portfolio snapshot, and writes `reports/portfolio_snapshot.json`. The workflow archives that JSON and the PushPlus notification includes current/target weights and drift. If data is incomplete, it explicitly reports that the portfolio snapshot is unavailable instead of inventing a partial return. The inherited default weights are AAPL 15%, NVDA 20%, BTC-USD 15%, 000300.SS 20%, and SGOV 30%; review these settings before relying on the report. This is monitoring only and does not place orders.
 
 ## Optional Qlib-inspired research layer
 
