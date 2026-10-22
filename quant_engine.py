@@ -91,7 +91,7 @@ def rank_universe(factors: pd.DataFrame) -> pd.DataFrame:
     out["composite_score"] = (numerator / available.replace(0, np.nan)).round(2)
     dd = pd.to_numeric(out["drawdown_120d"], errors="coerce")
     vol = pd.to_numeric(out["volatility_20d_ann"], errors="coerce")
-    ret20 = pd.to_numeric(out["return_20d"], errors="coerce")
+    ret20 = pd.to_numeric(out["return_20d"], errors="coerce")\n    ret120 = pd.to_numeric(out["return_120d"], errors="coerce")
     above50 = out["above_sma50"].astype("boolean").fillna(False).astype(bool)
     out["risk_pass"] = (dd.notna() & dd.ge(-.35) & vol.notna() & vol.le(1.0)
                         & above50 & ret20.notna() & ret20.gt(-.15)
