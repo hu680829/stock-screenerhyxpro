@@ -3,53 +3,59 @@
 Requires a prepared Qlib provider dataset. No network data download or trading occurs.
 """
 from __future__ import annotations
+
 import argparse
 import json
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+# Alpha158 LABEL0 uses Ref($close, -2) / Ref($close, -1) - 1.
+# A seven-calendar-day embargo is conservative for this two-trading-session horizon.
+MIN_SPLIT_EMBARGO_DAYS = 7
 
 
 def _json_safe_metrics(metrics: dict[str, float]) -> dict[str, float | None]:
     """Convert NaN/inf diagnostics to JSON null for strict JSON consumers."""
-    return {key: (float(value) if np.isfinite(value) else None)
+    return {key: float(value) if np.isfinite(value) else None
             for key, value in metrics.items()}
 
 
-def _daily_metrics(daily: pd.DataFrame, cost_bps: float) -> dict[str, float]:
-    returns = daily["net_return"].astype(float)
-    if returns.empty:
-        raise ValueError("the out-of-sample segment produced no usable daily returns")
-    equity = (1.0 + returns).cumprod()
-    total = float(equity.iloc[-1] - 1.0)
-    years = max(len(returns) / 252.0, 1.0 / 252.0)
-    cagr = float(equity.iloc[-1] ** (1.0 / years) - 1.0) if equity.iloc[-1] > 0 else -1.0
-    drawdown = equity / equity.cummax() - 1.0
-    std = returns.std(ddof=1)
-    sharpe = float(returns.mean() / std * np.sqrt(252)) if len(returns) > 1 and pd.notna(std) and std > 0 else 0.0
-    benchmark = daily["universe_equal_weight_return"].astype(float)
-    return {
-        "oos_observations": float(len(returns)),
-        "oos_total_return": total,
-        "oos_cagr": cagr,
-        "oos_max_drawdown": float(drawdown.min()),
-        "oos_annualized_volatility": float(std * np.sqrt(252)) if len(returns) > 1 else 0.0,
-        "oos_sharpe_rf0": sharpe,
-        "benchmark_equal_weight_total_return": float((1.0 + benchmark).prod() - 1.0),
-        "total_turnover": float(daily["turnover"].sum()),
-        "total_transaction_cost": float(daily["transaction_cost"].sum()),
-        "cost_bps_per_traded_notional": float(cost_bps),
-    }
-
+def _validate_split_dates(train_start: str, train_end: str, valid_start: str,
+                          valid_end: str, test_start: str, test_end: str) -> list[pd.Timestamp]:
+    """Validate chronology and leave an embargo for the future-looking label."""
+    try:
+        dates = [pd.Timestamp(value) for value in
+                 (train_start, train_end, valid_start, valid_end, test_start, test_end)]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("all segment boundaries must be valid dates") from exc
+    if any(pd.isna(value) for value in dates):
+        raise ValueError("all segment boundaries must be valid dates")
+    if not all(left < right for left, right in zip(dates, dates[1:])):
+        raise ValueError(
+            "date segments must be strictly chronological with gaps between inclusive "
+            "train/validation/test boundaries"
+        )
+    if (dates[2] - dates[1]).days < MIN_SPLIT_EMBARGO_DAYS:
+        raise ValueError(
+            f"train/validation split requires at least {MIN_SPLIT_EMBARGO_DAYS} calendar "
+            "days of embargo for the two-future-session Alpha158 label"
+        )
+    if (dates[4] - dates[3]).days < MIN_SPLIT_EMBARGO_DAYS:
+        raise ValueError(
+            f"validation/test split requires at least {MIN_SPLIT_EMBARGO_DAYS} calendar "
+            "days of embargo for the two-future-session Alpha158 label"
+        )
+    return dates
 
 
 def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
                            cost_bps: float) -> pd.DataFrame:
     """Build a daily equal-weight top-K portfolio from point-in-time predictions.
 
-    forward_return must represent the return earned after each signal date.
-    Turnover is the sum of absolute weight changes; the initial portfolio starts
-    in cash, so the first day's selected weights also incur transaction costs.
+    forward_return must represent the future return associated with each signal date.
+    Turnover is the sum of absolute weight changes; initial investment from cash is charged.
     """
     if top_k < 1:
         raise ValueError("top_k must be positive")
@@ -70,8 +76,10 @@ def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
         raise ValueError("No usable prediction/label rows")
     if data.duplicated(["date", "ticker"]).any():
         raise ValueError("duplicate date/ticker rows in predictions")
+    if (data["forward_return"] < -1.0).any():
+        raise ValueError("forward_return cannot be below -100% for long-only cash equities")
 
-    daily_rows = []
+    rows = []
     previous: set[str] = set()
     for date, group in data.groupby("date", sort=True):
         group = group.sort_values("factor", ascending=False, kind="mergesort")
@@ -79,25 +87,51 @@ def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
         current = set(selected["ticker"])
         if not current:
             continue
-        all_names = previous | current
+        names = previous | current
         turnover = sum(
             abs((1.0 / len(current) if name in current else 0.0)
                 - (1.0 / len(previous) if name in previous else 0.0))
-            for name in all_names
+            for name in names
         )
         gross = float(selected["forward_return"].mean())
         cost = turnover * cost_bps / 10000.0
-        daily_rows.append({
+        rows.append({
             "date": date, "gross_return": gross, "net_return": gross - cost,
             "transaction_cost": cost, "turnover": turnover,
             "universe_equal_weight_return": float(group["forward_return"].mean()),
             "n_names": int(len(group)), "n_selected": int(len(selected)),
         })
         previous = current
-    if not daily_rows:
+    if not rows:
         raise ValueError("No usable daily portfolio returns")
-    return pd.DataFrame(daily_rows).set_index("date").sort_index()
+    return pd.DataFrame(rows).set_index("date").sort_index()
 
+
+def _daily_metrics(daily: pd.DataFrame, cost_bps: float) -> dict[str, float]:
+    returns = daily["net_return"].astype(float)
+    if returns.empty:
+        raise ValueError("the out-of-sample segment produced no usable daily returns")
+    equity = (1.0 + returns).cumprod()
+    total = float(equity.iloc[-1] - 1.0)
+    years = max(len(returns) / 252.0, 1.0 / 252.0)
+    cagr = float(equity.iloc[-1] ** (1.0 / years) - 1.0) if equity.iloc[-1] > 0 else -1.0
+    drawdown = equity / equity.cummax() - 1.0
+    std = returns.std(ddof=1)
+    sharpe = (float(returns.mean() / std * np.sqrt(252))
+              if len(returns) > 1 and pd.notna(std) and std > 0 else 0.0)
+    benchmark = daily["universe_equal_weight_return"].astype(float)
+    return {
+        "oos_observations": float(len(returns)),
+        "oos_total_return": total,
+        "oos_cagr": cagr,
+        "oos_max_drawdown": float(drawdown.min()),
+        "oos_annualized_volatility": float(std * np.sqrt(252)) if len(returns) > 1 else 0.0,
+        "oos_sharpe_rf0": sharpe,
+        "benchmark_equal_weight_total_return": float((1.0 + benchmark).prod() - 1.0),
+        "total_turnover": float(daily["turnover"].sum()),
+        "total_transaction_cost": float(daily["transaction_cost"].sum()),
+        "cost_bps_per_traded_notional": float(cost_bps),
+    }
 
 
 def _cost_sensitivity(observations: pd.DataFrame, top_k: int,
@@ -108,12 +142,10 @@ def _cost_sensitivity(observations: pd.DataFrame, top_k: int,
     scenarios = sorted({float(value) for value in cost_bps_values})
     if any(not np.isfinite(value) or value < 0 for value in scenarios):
         raise ValueError("cost scenarios must be finite and non-negative")
-    rows = []
-    for bps in scenarios:
-        daily = _build_daily_portfolio(observations, top_k=top_k, cost_bps=bps)
-        metrics = _daily_metrics(daily, bps)
-        rows.append(metrics)
-    return pd.DataFrame(rows).sort_values("cost_bps_per_traded_notional").reset_index(drop=True)
+    return pd.DataFrame([
+        _daily_metrics(_build_daily_portfolio(observations, top_k, bps), bps)
+        for bps in scenarios
+    ]).sort_values("cost_bps_per_traded_notional").reset_index(drop=True)
 
 
 def run_experiment(provider_uri: str, train_start: str, train_end: str,
@@ -124,20 +156,7 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
         raise ValueError("top_k must be positive")
     if not np.isfinite(cost_bps) or cost_bps < 0:
         raise ValueError("cost_bps must be finite and non-negative")
-    # Parse dates instead of comparing strings. Qlib segment endpoints are
-    # inclusive, so equal boundaries can leak observations across segments.
-    try:
-        parsed_dates = [pd.Timestamp(value) for value in
-                        (train_start, train_end, valid_start, valid_end, test_start, test_end)]
-    except (TypeError, ValueError) as exc:
-        raise ValueError("all segment boundaries must be valid dates") from exc
-    if any(pd.isna(value) for value in parsed_dates):
-        raise ValueError("all segment boundaries must be valid dates")
-    if not all(left < right for left, right in zip(parsed_dates, parsed_dates[1:])):
-        raise ValueError(
-            "date segments must be strictly chronological with gaps between inclusive "
-            "train/validation/test boundaries"
-        )
+    _validate_split_dates(train_start, train_end, valid_start, valid_end, test_start, test_end)
     try:
         import qlib
         from qlib.constant import REG_US
@@ -190,8 +209,8 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
 
     daily = _build_daily_portfolio(observations, top_k, cost_bps)
     metrics = _daily_metrics(daily, cost_bps)
-    sensitivity_costs = sorted({0.0, 5.0, 10.0, 20.0, 30.0, float(cost_bps)})
-    sensitivity = _cost_sensitivity(observations, top_k, sensitivity_costs)
+    sensitivity = _cost_sensitivity(observations, top_k,
+                                    sorted({0.0, 5.0, 10.0, 20.0, 30.0, float(cost_bps)}))
     daily_ic = []
     for _, group in observations.groupby("date", sort=True):
         if len(group) >= 5:
@@ -200,7 +219,7 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
             daily_ic.append(float(ic) if pd.notna(ic) else np.nan)
     valid_ic = pd.Series(daily_ic).dropna()
     metrics["mean_rank_ic"] = float(valid_ic.mean()) if not valid_ic.empty else float("nan")
-    metrics["rank_ic_ir"] = (float(valid_ic.mean()/valid_ic.std(ddof=1))
+    metrics["rank_ic_ir"] = (float(valid_ic.mean() / valid_ic.std(ddof=1))
         if len(valid_ic) > 1 and valid_ic.std(ddof=1) > 0 else 0.0)
     metrics["positive_rank_ic_fraction"] = float((valid_ic > 0).mean()) if not valid_ic.empty else float("nan")
 
@@ -229,6 +248,7 @@ def main() -> int:
         args.top_k, args.cost_bps)
     print(json.dumps(_json_safe_metrics(metrics), indent=2, allow_nan=False))
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
