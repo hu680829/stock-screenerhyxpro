@@ -45,7 +45,7 @@ def evaluate_factor(
     for date, group in data.groupby(date_col, sort=True):
         if len(group) < min_cross_section:
             continue
-        ic = group[factor_col].corr(group[forward_return_col], method="spearman")
+        ic = group[factor_col].rank(method="average").corr(\n            group[forward_return_col].rank(method="average")\n        )
         ranked = group.sort_values(factor_col, ascending=False, kind="mergesort")
         bucket_size = max(1, int(np.floor(len(ranked) * 0.2)))
         top = ranked.head(bucket_size)[forward_return_col].mean()
