@@ -79,6 +79,23 @@ class QlibResearchTests(unittest.TestCase):
         self.assertLess(result.iloc[1]["oos_total_return"], result.iloc[0]["oos_total_return"])
         self.assertLess(result.iloc[2]["oos_total_return"], result.iloc[1]["oos_total_return"])
 
+    def test_rejects_nonfinite_cost_before_qlib_import(self):
+        with self.assertRaisesRegex(ValueError, "cost_bps"):
+            run_experiment(
+                provider_uri="/unused",
+                train_start="2010-01-01", train_end="2018-01-01",
+                valid_start="2018-01-02", valid_end="2020-01-01",
+                test_start="2020-01-02", test_end="2024-01-01",
+                cost_bps=float("nan"),
+            )
+
+    def test_portfolio_rejects_nonfinite_cost(self):
+        observations = pd.DataFrame([
+            {"date": "2024-01-02", "ticker": "AAA", "factor": 2.0, "forward_return": 0.02},
+        ])
+        with self.assertRaisesRegex(ValueError, "finite and non-negative"):
+            _build_daily_portfolio(observations, top_k=1, cost_bps=float("inf"))
+
     def test_cost_sensitivity_rejects_invalid_costs(self):
         observations = pd.DataFrame([
             {"date": "2024-01-02", "ticker": "AAA", "factor": 2.0, "forward_return": 0.02},
