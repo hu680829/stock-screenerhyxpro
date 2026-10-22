@@ -1,0 +1,51 @@
+name: Optional Qlib research environment
+
+on:
+  pull_request:
+    paths:
+      - "research/**"
+      - "requirements-research.txt"
+      - "requirements.txt"
+      - ".github/workflows/qlib-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qlib-environment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-research.txt
+      - name: Compile research sources
+        run: python -m compileall -q research tests
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Smoke-test Qlib and LightGBM APIs
+        run: |
+          python - <<'PY'
+          import lightgbm
+          import qlib
+          from qlib.contrib.data.handler import Alpha158
+          from qlib.contrib.model.gbdt import LGBModel
+          from qlib.data.dataset import DatasetH
+          from qlib.data.dataset.handler import DataHandlerLP
+
+          print("qlib:", getattr(qlib, "__version__", "version metadata unavailable"))
+          print("lightgbm:", lightgbm.__version__)
+          print("Alpha158:", Alpha158.__name__)
+          print("LGBModel:", LGBModel.__name__)
+          print("DatasetH:", DatasetH.__name__)
+          print("DataHandlerLP:", DataHandlerLP.__name__)
+          PY
