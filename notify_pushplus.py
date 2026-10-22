@@ -65,12 +65,12 @@ def append_portfolio_snapshot(message: str, snapshot_path: str | Path = "reports
     try:
         snapshot = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return message + "\\n<p><b>持仓监控：</b>报告无法读取，请检查 GitHub Actions 日志。</p>"
+        return message + "\n<p><b>持仓监控：</b>报告无法读取，请检查 GitHub Actions 日志。</p>"
     if snapshot.get("status") != "ok":
         error = html.escape(str(snapshot.get("error", "数据不可用")))
-        return message + f"\\n<h3>持仓风险监控</h3><p><b>数据暂不可用：</b>{error}。本次不计算持仓收益或再平衡建议。</p>"
+        return message + f"\n<h3>持仓风险监控</h3><p><b>数据暂不可用：</b>{error}。本次不计算持仓收益或再平衡建议。</p>"
     lines = [
-        "\\n<h3>持仓风险监控（非交易指令）</h3>",
+        "\n<h3>持仓风险监控（非交易指令）</h3>",
         f"<p>共同交易日：{html.escape(str(snapshot.get('previous_session')))} → {html.escape(str(snapshot.get('latest_session')))}</p>",
         f"<p>按人民币计价组合区间收益：{float(snapshot['portfolio_return'])*100:.2f}%</p>",
         f"<p>USD/CNH 区间变化：{float(snapshot['usd_cnh_return'])*100:.2f}%</p>",
@@ -92,7 +92,7 @@ def append_portfolio_snapshot(message: str, snapshot_path: str | Path = "reports
                      "。请人工核验后再决定是否调整。</p>")
     else:
         lines.append("<p>当前没有标的达到再平衡偏离阈值。</p>")
-    return message + "\\n" + "\\n".join(lines)
+    return message + "\n" + "\n".join(lines)
 
 
 def send_pushplus(token: str, title: str, content: str, timeout: int = 20) -> dict:
