@@ -37,7 +37,7 @@ class BacktestTests(unittest.TestCase):
     def test_missing_return_for_held_asset_fails_closed(self):
         prices = self.prices(260)
         # Make a selected asset's price unavailable after it has become eligible.
-        prices.iloc[205, prices.columns.get_loc("AAPL")] = np.nan
+        prices.iloc[205, prices.columns.get_loc("AAA")] = np.nan
         with self.assertRaisesRegex(ValueError, "missing daily return for held asset"):
             run_backtest(prices, top_n=1, rebalance_every=5, cost_bps=0, benchmark="SPY")
 
