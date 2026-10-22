@@ -134,6 +134,7 @@ def main() -> int:
     csv_path = sys.argv[1] if len(sys.argv) > 1 else "reports/quant_rankings.csv"
     try:
         title, content = build_message(csv_path)
+        content = append_portfolio_snapshot(content)
         result = send_pushplus(token, title, content)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"ERROR: notification failed: {exc}", file=sys.stderr)
