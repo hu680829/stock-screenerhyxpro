@@ -43,6 +43,18 @@ class PushPlusNotificationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             notify_pushplus.build_message(path)
 
+    def test_portfolio_snapshot_failure_is_reported_not_silently_ignored(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "portfolio.json"
+            path.write_text(json.dumps({
+                "status": "data_unavailable",
+                "error": "missing shared sessions",
+                "rebalance_alerts": {}
+            }), encoding="utf-8")
+            body = notify_pushplus.append_portfolio_snapshot("<p>rankings</p>", path)
+            self.assertIn("数据暂不可用", body)
+            self.assertIn("missing shared sessions", body)
+
     @patch("notify_pushplus.urlopen")
     def test_pushplus_api_rejection_raises(self, mocked_urlopen):
         response = MagicMock()
