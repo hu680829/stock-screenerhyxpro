@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Compile Python sources
-        run: python -m compileall -q quant_engine.py backtest.py research tests
+        run: python -m compileall -q quant_engine.py backtest.py research tests notify_pushplus.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
       - name: Run screener
@@ -34,3 +34,8 @@ jobs:
           name: quant-rankings
           path: reports/quant_rankings.csv
           if-no-files-found: error
+      - name: Send WeChat notification through PushPlus
+        if: github.event_name != 'pull_request'
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: python notify_pushplus.py reports/quant_rankings.csv
