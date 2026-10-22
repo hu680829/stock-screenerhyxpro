@@ -74,8 +74,12 @@ def run_backtest(prices: pd.DataFrame, lookback: int | None = None, top_n: int =
         raise ValueError("prices must contain at least one usable ticker")
     if (px.dropna(how="all") <= 0).any().any():
         raise ValueError("prices must contain positive numeric prices")
-    scores, risk = calculate_signal_frame(px)
+    # The benchmark is for comparison only; it must not influence cross-sectional
+    # factor percentiles or become an implicit member of the investable universe.
     assets = [c for c in px.columns if c != benchmark]
+    if not assets:
+        raise ValueError("prices must include at least one investable ticker besides the benchmark")
+    scores, risk = calculate_signal_frame(px[assets])
     targets = pd.DataFrame(0.0, index=px.index, columns=px.columns)
     scheduled = pd.Series(False, index=px.index)
     for i in range(200, len(px), rebalance_every):
