@@ -36,6 +36,63 @@ def _daily_metrics(daily: pd.DataFrame, cost_bps: float) -> dict[str, float]:
     }
 
 
+
+def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
+                           cost_bps: float) -> pd.DataFrame:
+    """Build a daily equal-weight top-K portfolio from point-in-time predictions.
+
+    forward_return must represent the return earned after each signal date.
+    Turnover is the sum of absolute weight changes; the initial portfolio starts
+    in cash, so the first day's selected weights also incur transaction costs.
+    """
+    if top_k < 1:
+        raise ValueError("top_k must be positive")
+    if cost_bps < 0:
+        raise ValueError("cost_bps must be non-negative")
+    required = {"date", "ticker", "factor", "forward_return"}
+    missing = required.difference(observations.columns)
+    if missing:
+        raise ValueError(f"missing required columns: {sorted(missing)}")
+    data = observations.copy()
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    data["ticker"] = data["ticker"].astype(str)
+    for col in ("factor", "forward_return"):
+        data[col] = pd.to_numeric(data[col], errors="coerce")
+    data = data.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["date", "ticker", "factor", "forward_return"])
+    if data.empty:
+        raise ValueError("No usable prediction/label rows")
+    if data.duplicated(["date", "ticker"]).any():
+        raise ValueError("duplicate date/ticker rows in predictions")
+
+    daily_rows = []
+    previous: set[str] = set()
+    for date, group in data.groupby("date", sort=True):
+        group = group.sort_values("factor", ascending=False, kind="mergesort")
+        selected = group.head(min(top_k, len(group)))
+        current = set(selected["ticker"])
+        if not current:
+            continue
+        all_names = previous | current
+        turnover = sum(
+            abs((1.0 / len(current) if name in current else 0.0)
+                - (1.0 / len(previous) if name in previous else 0.0))
+            for name in all_names
+        )
+        gross = float(selected["forward_return"].mean())
+        cost = turnover * cost_bps / 10000.0
+        daily_rows.append({
+            "date": date, "gross_return": gross, "net_return": gross - cost,
+            "transaction_cost": cost, "turnover": turnover,
+            "universe_equal_weight_return": float(group["forward_return"].mean()),
+            "n_names": int(len(group)), "n_selected": int(len(selected)),
+        })
+        previous = current
+    if not daily_rows:
+        raise ValueError("No usable daily portfolio returns")
+    return pd.DataFrame(daily_rows).set_index("date").sort_index()
+
+
 def run_experiment(provider_uri: str, train_start: str, train_end: str,
                    valid_start: str, valid_end: str, test_start: str, test_end: str,
                    output_dir: str = "reports/qlib_oos", top_k: int = 10,
@@ -94,29 +151,7 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
     if observations.empty:
         raise ValueError("No overlapping prediction/label rows in the OOS period")
 
-    daily_rows = []
-    previous: set[str] = set()
-    for date, group in observations.groupby("date", sort=True):
-        group = group.sort_values("factor", ascending=False, kind="mergesort")
-        if group["ticker"].duplicated().any():
-            raise ValueError(f"duplicate ticker rows for test date {date}")
-        selected = group.head(min(top_k, len(group)))
-        current = set(selected["ticker"])
-        if not current:
-            continue
-        all_names = previous | current
-        turnover = sum(abs((1.0 / len(current) if name in current else 0.0)
-                           - (1.0 / len(previous) if name in previous else 0.0))
-                       for name in all_names)
-        gross = float(selected["forward_return"].mean())
-        cost = turnover * cost_bps / 10000.0
-        daily_rows.append({"date": date, "gross_return": gross, "net_return": gross-cost,
-                           "transaction_cost": cost, "turnover": turnover,
-                           "universe_equal_weight_return": float(group["forward_return"].mean()),
-                           "n_names": int(len(group)), "n_selected": int(len(selected))})
-        previous = current
-
-    daily = pd.DataFrame(daily_rows).set_index("date").sort_index()
+    daily = _build_daily_portfolio(observations, top_k, cost_bps)
     metrics = _daily_metrics(daily, cost_bps)
     daily_ic = []
     for _, group in observations.groupby("date", sort=True):
