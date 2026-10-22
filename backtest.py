@@ -43,18 +43,20 @@ def run_backtest(
 
     # Weight target holdings at each rebalance close; no same-bar return capture.
     targets = pd.DataFrame(0.0, index=px.index, columns=px.columns)
+    # Track scheduled rebalance dates separately from non-zero targets. If every
+    # candidate has missing momentum on a rebalance date, the strategy explicitly
+    # moves to cash rather than silently carrying stale holdings.
+    rebalance_rows = pd.Series(False, index=px.index)
     for i in range(lookback, len(px), rebalance_every):
+        rebalance_rows.iloc[i] = True
         scores = momentum.iloc[i].dropna()
         scores = scores[scores.index != benchmark].sort_values(ascending=False)
         selected = scores.head(top_n)
         if len(selected):
             targets.iloc[i, targets.columns.get_indexer(selected.index)] = 1.0 / len(selected)
 
-    # Carry the last rebalance weights forward, then shift to avoid look-ahead.
-    holdings = targets.replace(0.0, np.nan).ffill().fillna(0.0)
-    # A zero-weight asset at a rebalance must be explicitly removed; forward-fill
-    # targets row-wise using a separate rebalance marker.
-    rebalance_rows = targets.sum(axis=1) > 0
+    # Carry target weights until the next scheduled rebalance, including a
+    # scheduled zero-weight target (cash) when no candidates are eligible.
     holdings = targets.copy()
     last = pd.Series(0.0, index=px.columns)
     for i in range(len(holdings)):
