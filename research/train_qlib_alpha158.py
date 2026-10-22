@@ -67,7 +67,9 @@ def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
         raise ValueError(f"missing required columns: {sorted(missing)}")
     data = observations.copy()
     data["date"] = pd.to_datetime(data["date"], errors="coerce")
-    data["ticker"] = data["ticker"].astype(str)
+    # Normalize identifiers before duplicate checks so "AAA" and " AAA " cannot
+    # silently enter the same cross-section as separate securities.
+    data["ticker"] = data["ticker"].astype("string").str.strip()
     for col in ("factor", "forward_return"):
         data[col] = pd.to_numeric(data[col], errors="coerce")
     data = data.replace([np.inf, -np.inf], np.nan).dropna(
@@ -229,7 +231,8 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
     sensitivity.to_csv(output / "oos_cost_sensitivity.csv", index=False)
     observations.to_csv(output / "oos_predictions_and_labels.csv", index=False)
     (output / "oos_metrics.json").write_text(
-        json.dumps(_json_safe_metrics(metrics), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        json.dumps(_json_safe_metrics(metrics), indent=2, allow_nan=False) + "
+", encoding="utf-8")
     return metrics
 
 
