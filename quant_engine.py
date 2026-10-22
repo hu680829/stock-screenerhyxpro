@@ -17,6 +17,7 @@ def _close_series(history: pd.DataFrame) -> pd.Series:
         raise ValueError("history must contain a 'Close' column")
     close = pd.to_numeric(history["Close"], errors="coerce").dropna()
     close = close[~close.index.duplicated(keep="last")].sort_index()
+    close = close[np.isfinite(close.to_numpy(dtype=float))]
     if len(close) < 30:
         raise ValueError("at least 30 valid daily closes are required")
     if (close <= 0).any():
@@ -38,7 +39,12 @@ def calculate_factors(history: pd.DataFrame) -> dict:
     drawdown120 = last / peak120 - 1
     volume_ratio = np.nan
     if "Volume" in history.columns:
-        volume = pd.to_numeric(history["Volume"], errors="coerce").dropna()
+        # Align volume to the cleaned close-price calendar; independent tail() calls
+        # can otherwise compare different sessions when either series has gaps.
+        volume = pd.to_numeric(history["Volume"], errors="coerce")
+        volume = volume[~volume.index.duplicated(keep="last")].sort_index()
+        volume = volume.reindex(close.index).dropna()
+        volume = volume[np.isfinite(volume.to_numpy(dtype=float)) & (volume >= 0)]
         if len(volume) >= 60:
             mean20, mean60 = float(volume.tail(20).mean()), float(volume.tail(60).mean())
             if mean60 > 0:
@@ -113,10 +119,12 @@ def scan_tickers(tickers: Iterable[str], period: str = "1y") -> pd.DataFrame:
     except ImportError as exc:
         raise RuntimeError("Install dependencies with: pip install -r requirements.txt") from exc
     rows = []
+    seen_tickers: set[str] = set()
     for raw_ticker in tickers:
         ticker = raw_ticker.strip().upper()
-        if not ticker:
+        if not ticker or ticker in seen_tickers:
             continue
+        seen_tickers.add(ticker)
         try:
             history = yf.download(ticker, period=period, interval="1d", auto_adjust=True,
                                   progress=False, threads=False)
