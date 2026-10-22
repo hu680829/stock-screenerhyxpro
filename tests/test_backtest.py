@@ -45,6 +45,17 @@ class BacktestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_backtest(self.prices(250), cost_bps=-1)
 
+    def test_rejects_non_positive_or_infinite_prices(self):
+        prices = self.prices(250)
+        prices.iloc[10, prices.columns.get_loc("AAA")] = np.inf
+        with self.assertRaisesRegex(ValueError, "missing daily return|positive numeric prices"):
+            run_backtest(prices, cost_bps=0)
+
+        prices = self.prices(250)
+        prices.iloc[10, prices.columns.get_loc("AAA")] = 0
+        with self.assertRaisesRegex(ValueError, "positive numeric prices"):
+            run_backtest(prices, cost_bps=0)
+
     def test_requires_sufficient_history(self):
         with self.assertRaises(ValueError):
             run_backtest(self.prices(80))
