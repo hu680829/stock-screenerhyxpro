@@ -2,6 +2,7 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+from quant_engine import MIN_FACTOR_COVERAGE
 
 WEIGHTS = {"mom20": .20, "mom60": .25, "mom120": .25, "trend": .20, "low_vol": .10}
 
@@ -45,8 +46,10 @@ def calculate_signal_frame(prices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         parts["trend"] = trend_raw.mean(axis=1, skipna=True).where(trend_raw.notna().any(axis=1))
         numerator = sum(parts[k].fillna(0) * w for k, w in WEIGHTS.items())
         available = sum(parts[k].notna().astype(float) * w for k, w in WEIGHTS.items())
+        coverage = available / sum(WEIGHTS.values())
         scores.iloc[i] = (numerator / available.replace(0, np.nan)).round(2)
-        risk.iloc[i] = (dd120.iloc[i].ge(-.35) & dd120.iloc[i].notna()
+        risk.iloc[i] = (coverage.ge(MIN_FACTOR_COVERAGE) & coverage.notna()
+                        & dd120.iloc[i].ge(-.35) & dd120.iloc[i].notna()
                         & vol20.iloc[i].le(1.0) & vol20.iloc[i].notna()
                         & px.iloc[i].gt(sma50.iloc[i]) & sma50.iloc[i].notna()
                         & mom20.iloc[i].gt(-.15) & mom20.iloc[i].notna()
@@ -61,8 +64,8 @@ def run_backtest(prices: pd.DataFrame, lookback: int | None = None, top_n: int =
         raise ValueError("top_n >= 1 and rebalance_every >= 1 required")
     if lookback is not None and lookback < 2:
         raise ValueError("lookback, when supplied, must be >= 2")
-    if cost_bps < 0:
-        raise ValueError("cost_bps must be non-negative")
+    if not np.isfinite(cost_bps) or cost_bps < 0:
+        raise ValueError("cost_bps must be finite and non-negative")
     if prices is None or prices.empty:
         raise ValueError("prices must contain at least one ticker column")
     px = prices.apply(pd.to_numeric, errors="coerce").copy()
