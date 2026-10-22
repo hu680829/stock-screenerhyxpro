@@ -7,7 +7,7 @@ A transparent research-oriented daily multi-factor stock screener. It downloads 
 - Trend: price versus SMA50 and SMA200. A long average is unavailable until enough bars exist; shorter data is never substituted.
 - Risk: 20-day annualized realized volatility and 120-day peak drawdown.
 - Optional volume context: average volume over 20 days divided by average volume over 60 days.
-- Weighted cross-sectional score, factor coverage, and a separate risk filter.
+- Weighted cross-sectional score, factor coverage, and a separate risk filter. Candidates need at least 70% factor-weight coverage to pass the risk gate; incomplete-history names are not promoted on a partial score.
 
 ## Run
 Python 3.10+ recommended.
@@ -25,7 +25,7 @@ Python 3.10+ recommended.
 
 Percentiles are calculated across symbols available in the same cross-section. When fewer than two valid values exist, the percentile is missing rather than an arbitrary 50. Composite scores are renormalized over available factors and report factor_coverage. Review low-coverage scores carefully. The score is a relative ranking, not a probability of profit.
 
-Risk gate: price must be above SMA50, 20-day return above -15%, 120-day drawdown no worse than -35%, and annualized 20-day volatility no more than 100%. Missing required risk inputs fail closed.
+Risk gate: price must be above SMA50, 20-day return above -15%, 120-day drawdown no worse than -35%, and annualized 20-day volatility no more than 100%. Missing required risk inputs fail closed. The same 70% factor-coverage floor is enforced in the historical backtest so the tested selection rules match the screener.
 
 ## Unified historical backtest
 
