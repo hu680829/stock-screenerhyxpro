@@ -65,7 +65,9 @@ def run_backtest(
 
     gross = (held * daily_returns.fillna(0.0)).sum(axis=1)
     turnover = holdings.diff().abs().sum(axis=1).fillna(holdings.iloc[0].abs().sum())
-    costs = turnover * (cost_bps / 10000.0)
+    # A rebalance signal is formed at close t, so its transaction cost belongs
+    # to the next return interval, alongside the shifted holdings.
+    costs = turnover.shift(1).fillna(0.0) * (cost_bps / 10000.0)
     net = gross - costs
     output = pd.DataFrame({"strategy_return": net, "gross_return": gross, "turnover": turnover}, index=px.index)
     if benchmark in daily_returns.columns:
