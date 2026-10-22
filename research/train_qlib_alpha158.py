@@ -53,8 +53,8 @@ def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
     """
     if top_k < 1:
         raise ValueError("top_k must be positive")
-    if cost_bps < 0:
-        raise ValueError("cost_bps must be non-negative")
+    if not np.isfinite(cost_bps) or cost_bps < 0:
+        raise ValueError("cost_bps must be finite and non-negative")
     required = {"date", "ticker", "factor", "forward_return"}
     missing = required.difference(observations.columns)
     if missing:
@@ -122,8 +122,8 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
                    cost_bps: float = 10.0) -> dict[str, float]:
     if top_k < 1:
         raise ValueError("top_k must be positive")
-    if cost_bps < 0:
-        raise ValueError("cost_bps must be non-negative")
+    if not np.isfinite(cost_bps) or cost_bps < 0:
+        raise ValueError("cost_bps must be finite and non-negative")
     # Parse dates instead of comparing strings. Qlib segment endpoints are
     # inclusive, so equal boundaries can leak observations across segments.
     try:
