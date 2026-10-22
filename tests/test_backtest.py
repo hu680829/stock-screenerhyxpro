@@ -1,56 +1,46 @@
 import unittest
-
 import numpy as np
 import pandas as pd
-
-from backtest import run_backtest
-
+from backtest import calculate_signal_frame, run_backtest
 
 class BacktestTests(unittest.TestCase):
-    def test_returns_metrics_and_costs(self):
-        idx = pd.date_range("2020-01-01", periods=260, freq="B")
-        t = np.arange(len(idx), dtype=float)
-        prices = pd.DataFrame({
-            "AAA": 50 * (1.003 ** t),
-            "BBB": 50 * (1.001 ** t),
-            "SPY": 100 * (1.0008 ** t),
-        }, index=idx)
-        result, metrics = run_backtest(
-            prices, lookback=60, top_n=1, rebalance_every=20,
-            cost_bps=10, benchmark="SPY"
-        )
-        self.assertIn("strategy_return", result.columns)
+    def prices(self, n=320):
+        idx = pd.date_range("2020-01-01", periods=n, freq="B")
+        t = np.arange(n, dtype=float)
+        return pd.DataFrame({"AAA":50*(1.003**t),"BBB":50*(1.001**t),
+                             "SPY":100*(1.0008**t)}, index=idx)
+
+    def test_signal_needs_history_and_risk_gate(self):
+        scores, risk = calculate_signal_frame(self.prices())
+        self.assertTrue(scores.iloc[:120].isna().all().all())
+        self.assertFalse(risk.iloc[:50].any().any())
+        self.assertTrue(bool(risk.iloc[-1]["AAA"]))
+
+    def test_metrics_costs_and_benchmark(self):
+        result, metrics = run_backtest(self.prices(), top_n=1, rebalance_every=20,
+                                       cost_bps=10, benchmark="SPY")
+        self.assertIn("strategy_return", result)
+        self.assertIn("transaction_cost", result)
         self.assertIn("benchmark_total_return", metrics)
-        self.assertLessEqual(metrics["max_drawdown"], 0.0)
+        self.assertLessEqual(metrics["max_drawdown"], 0)
         self.assertGreater(metrics["observations"], 0)
         self.assertGreater(metrics["cost_bps_one_way"], 0)
 
-    def test_scheduled_rebalance_with_no_valid_candidates_clears_old_holdings(self):
-        idx = pd.date_range("2020-01-01", periods=12, freq="B")
-        # A gap makes momentum unavailable on the scheduled rebalance at idx[10],
-        # while prices recover afterward so stale exposure would create returns.
-        prices = pd.DataFrame({
-            "AAA": [10, 11, 12, 13, 14, 15, 16, 17, np.nan, 19, 20, 21],
-            "BBB": [10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, np.nan, 15, 16, 17],
-        }, index=idx)
-        result, _ = run_backtest(
-            prices, lookback=2, top_n=1, rebalance_every=4,
-            cost_bps=0, benchmark="SPY"
-        )
-        # The scheduled rebalance at idx[10] has no valid momentum scores.
-        # Holdings are cleared at close idx[10], so idx[11] earns no exposure.
-        self.assertEqual(result.loc[idx[11], "gross_return"], 0.0)
+    def test_no_candidates_means_cash_after_rebalance(self):
+        prices = self.prices()
+        # Cause a severe drawdown in every asset; risk gate should block candidates.
+        prices.iloc[220:] = prices.iloc[220:] * 0.4
+        result, _ = run_backtest(prices, top_n=1, rebalance_every=5, cost_bps=0, benchmark="SPY")
+        # After a later scheduled rebalance with no eligible names, there is no stale exposure.
+        self.assertTrue((result["gross_return"].iloc[230:] == 0).all())
 
     def test_rejects_invalid_cost(self):
-        prices = pd.DataFrame({"AAA": [10, 11, 12, 13]})
         with self.assertRaises(ValueError):
-            run_backtest(prices, lookback=2, cost_bps=-1)
+            run_backtest(self.prices(250), cost_bps=-1)
 
     def test_requires_sufficient_history(self):
-        prices = pd.DataFrame({"AAA": [10, 11, 12, 13]})
         with self.assertRaises(ValueError):
-            run_backtest(prices, lookback=20)
-
+            run_backtest(self.prices(80))
 
 if __name__ == "__main__":
     unittest.main()
