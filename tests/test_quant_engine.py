@@ -22,6 +22,22 @@ class FactorEngineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             calculate_factors(frame)
 
+    def test_missing_momentum_gets_neutral_score(self):
+        scores = pd.Series([0.10, np.nan, -0.10], index=["A", "B", "C"])
+        from quant_engine import _percentile_score
+        result = _percentile_score(scores)
+        self.assertEqual(result["B"], 50.0)
+
+    def test_missing_risk_inputs_fail_closed(self):
+        frame = pd.DataFrame([
+            {"ticker": "AAA", "return_20d": .08, "return_60d": .20,
+             "return_120d": .30, "volatility_20d_ann": np.nan,
+             "drawdown_120d": -.05, "above_sma50": True, "above_sma200": True}
+        ])
+        result = rank_universe(frame)
+        self.assertFalse(bool(result.iloc[0]["risk_pass"]))
+        self.assertEqual(result.iloc[0]["recommendation"], "RISK_FILTERED")
+
     def test_risk_filter_and_ranking(self):
         frame = pd.DataFrame([
             {"ticker": "AAA", "return_20d": .08, "return_60d": .20,
