@@ -19,9 +19,12 @@ Replace the provider path and dates with dates supported by your dataset:
 
 The segments must be chronological and non-overlapping. Validation is for model selection/early stopping; the later test period is reserved for out-of-sample reporting. Do not repeatedly tune against the test period.
 
+Qlib's current Alpha158 default label is `Ref($close, -2) / Ref($close, -1) - 1` (`LABEL0`): it measures the close-to-close return from the next session's close to the following session's close, indexed to the signal date. This is not the same as the signal-day close-to-next-day close return. Verify the installed Qlib version's handler definition and provider's trading calendar before interpreting results. The script requires strictly increasing date boundaries because Qlib segment endpoints are inclusive.
+
 Outputs:
 - oos_metrics.json: test-period return, CAGR, drawdown, volatility, Sharpe, equal-weight-universe comparison, turnover/costs, mean rank IC, IC IR, and positive-IC fraction.
 - oos_daily_returns.csv: gross/net strategy returns, transaction costs, turnover, and equal-weight-universe returns.
+- oos_cost_sensitivity.csv: the same OOS predictions evaluated at 0, 5, 10, 20, and 30 bps (plus the configured cost, if different); this is a sensitivity analysis, not additional independent tests.
 - oos_predictions_and_labels.csv: model predictions and future labels used for evaluation.
 
 ## 3. Limitations and acceptance criteria
