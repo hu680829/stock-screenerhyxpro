@@ -16,17 +16,17 @@ class BacktestTests(unittest.TestCase):
         self.assertFalse(risk.iloc[:50].any().any())
         self.assertTrue(bool(risk.iloc[-1]["AAA"]))
 
-    def test_benchmark_does_not_change_cross_sectional_signal_scores(self):
+    def test_benchmark_does_not_change_strategy_returns(self):
         prices = self.prices(320)
-        scores_before, risk_before = calculate_signal_frame(prices[["AAA", "BBB"]])
-        # An extreme benchmark should not enter the investable cross-section.
-        prices["SPY"] = np.linspace(100, 10000, len(prices))
-        result, _ = run_backtest(prices, top_n=1, rebalance_every=20,
-                                 cost_bps=0, benchmark="SPY")
-        scores_after, risk_after = calculate_signal_frame(prices[["AAA", "BBB"]])
-        pd.testing.assert_frame_equal(scores_before, scores_after)
-        pd.testing.assert_frame_equal(risk_before, risk_after)
-        self.assertIn("benchmark_return", result.columns)
+        baseline, _ = run_backtest(prices, top_n=1, rebalance_every=20,
+                                   cost_bps=0, benchmark="SPY")
+        changed_benchmark = prices.copy()
+        changed_benchmark["SPY"] = np.linspace(100, 10000, len(prices))
+        changed, _ = run_backtest(changed_benchmark, top_n=1, rebalance_every=20,
+                                  cost_bps=0, benchmark="SPY")
+        pd.testing.assert_series_equal(baseline["strategy_return"], changed["strategy_return"])
+        self.assertIn("benchmark_return", changed.columns)
+        self.assertFalse(baseline["benchmark_return"].equals(changed["benchmark_return"]))
 
     def test_metrics_costs_and_benchmark(self):
         result, metrics = run_backtest(self.prices(), top_n=1, rebalance_every=20,
