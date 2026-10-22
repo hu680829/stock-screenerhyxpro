@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from research.train_qlib_alpha158 import run_experiment, _build_daily_portfolio
+from research.train_qlib_alpha158 import run_experiment, _build_daily_portfolio, _cost_sensitivity
 
 
 class QlibResearchTests(unittest.TestCase):
@@ -65,6 +65,26 @@ class QlibResearchTests(unittest.TestCase):
         self.assertAlmostEqual(daily.iloc[0]["net_return"], 0.019)
         self.assertAlmostEqual(daily.iloc[1]["turnover"], 0.0)
         self.assertAlmostEqual(daily.iloc[1]["net_return"], 0.03)
+
+    def test_cost_sensitivity_reuses_same_gross_returns_and_net_falls_with_cost(self):
+        observations = pd.DataFrame([
+            {"date": "2024-01-02", "ticker": "AAA", "factor": 2.0, "forward_return": 0.02},
+            {"date": "2024-01-02", "ticker": "BBB", "factor": 1.0, "forward_return": 0.01},
+            {"date": "2024-01-03", "ticker": "AAA", "factor": 3.0, "forward_return": 0.03},
+            {"date": "2024-01-03", "ticker": "BBB", "factor": 1.0, "forward_return": -0.01},
+        ])
+        result = _cost_sensitivity(observations, top_k=1, cost_bps_values=[20, 0, 10])
+        self.assertEqual(result["cost_bps_per_traded_notional"].tolist(), [0.0, 10.0, 20.0])
+        self.assertAlmostEqual(result.iloc[0]["oos_total_return"], 0.0506)
+        self.assertLess(result.iloc[1]["oos_total_return"], result.iloc[0]["oos_total_return"])
+        self.assertLess(result.iloc[2]["oos_total_return"], result.iloc[1]["oos_total_return"])
+
+    def test_cost_sensitivity_rejects_invalid_costs(self):
+        observations = pd.DataFrame([
+            {"date": "2024-01-02", "ticker": "AAA", "factor": 2.0, "forward_return": 0.02},
+        ])
+        with self.assertRaisesRegex(ValueError, "finite and non-negative"):
+            _cost_sensitivity(observations, top_k=1, cost_bps_values=[float("nan")])
 
     def test_portfolio_rejects_duplicate_date_ticker_rows(self):
         observations = pd.DataFrame([
