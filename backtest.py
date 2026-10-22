@@ -68,8 +68,12 @@ def run_backtest(prices: pd.DataFrame, lookback: int | None = None, top_n: int =
         raise ValueError("cost_bps must be finite and non-negative")
     if prices is None or prices.empty:
         raise ValueError("prices must contain at least one ticker column")
-    px = prices.apply(pd.to_numeric, errors="coerce").copy()
+    px = prices.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan).copy()
     px = px.loc[~px.index.duplicated(keep="last")].sort_index().dropna(axis=1, how="all")
+    if px.empty:
+        raise ValueError("prices must contain at least one usable ticker")
+    if (px.dropna(how="all") <= 0).any().any():
+        raise ValueError("prices must contain positive numeric prices")
     scores, risk = calculate_signal_frame(px)
     assets = [c for c in px.columns if c != benchmark]
     targets = pd.DataFrame(0.0, index=px.index, columns=px.columns)
