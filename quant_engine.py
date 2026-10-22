@@ -69,12 +69,14 @@ def calculate_factors(history: pd.DataFrame) -> dict[str, float | bool]:
 
 def _percentile_score(values: pd.Series, higher_is_better: bool = True) -> pd.Series:
     values = pd.to_numeric(values, errors="coerce")
-    if values.notna().sum() <= 1:
+    valid = values.notna()
+    if valid.sum() <= 1:
         return pd.Series(50.0, index=values.index)
     ranks = values.rank(pct=True, method="average")
     if not higher_is_better:
         ranks = 1 - ranks
-    return ranks * 100.0
+    # Missing factors are neutral rather than poisoning the composite score.
+    return (ranks * 100.0).where(valid, 50.0)
 
 
 def rank_universe(factors: pd.DataFrame) -> pd.DataFrame:
@@ -109,11 +111,15 @@ def rank_universe(factors: pd.DataFrame) -> pd.DataFrame:
         + out["score_low_vol"] * 0.10
     ).round(2)
 
+    # Missing risk inputs must fail closed: unavailable data is not evidence of safety.
+    drawdown = pd.to_numeric(out["drawdown_120d"], errors="coerce")
+    volatility = pd.to_numeric(out["volatility_20d_ann"], errors="coerce")
+    short_return = pd.to_numeric(out["return_20d"], errors="coerce")
     out["risk_pass"] = (
-        pd.to_numeric(out["drawdown_120d"], errors="coerce").ge(-0.35)
-        & pd.to_numeric(out["volatility_20d_ann"], errors="coerce").le(1.00)
+        drawdown.notna() & drawdown.ge(-0.35)
+        & volatility.notna() & volatility.le(1.00)
         & out["above_sma50"].fillna(False).astype(bool)
-        & pd.to_numeric(out["return_20d"], errors="coerce").gt(-0.15)
+        & short_return.notna() & short_return.gt(-0.15)
     )
     out["recommendation"] = np.where(out["risk_pass"], "REVIEW", "RISK_FILTERED")
     out = out.sort_values(["risk_pass", "composite_score"], ascending=[False, False])
