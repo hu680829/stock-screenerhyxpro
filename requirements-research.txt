@@ -1,0 +1,4 @@
+# Optional research-only dependencies; not installed by the daily screener workflow.
+-r requirements.txt
+pyqlib>=0.9.7
+lightgbm>=4.0.0
