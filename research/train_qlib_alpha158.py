@@ -10,6 +10,12 @@ import numpy as np
 import pandas as pd
 
 
+def _json_safe_metrics(metrics: dict[str, float]) -> dict[str, float | None]:
+    """Convert NaN/inf diagnostics to JSON null for strict JSON consumers."""
+    return {key: (float(value) if np.isfinite(value) else None)
+            for key, value in metrics.items()}
+
+
 def _daily_metrics(daily: pd.DataFrame, cost_bps: float) -> dict[str, float]:
     returns = daily["net_return"].astype(float)
     if returns.empty:
@@ -156,7 +162,9 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
     model = LGBModel(loss="mse", learning_rate=0.05, num_leaves=31,
                      max_depth=-1, num_boost_round=500,
                      early_stopping_rounds=50, lambda_l1=0.1,
-                     lambda_l2=1.0, num_threads=4)
+                     lambda_l2=1.0, num_threads=4, seed=42,
+                     feature_fraction_seed=42, bagging_seed=42,
+                     deterministic=True, force_col_wise=True)
     model.fit(dataset)
     predictions = model.predict(dataset, segment="test")
     labels = dataset.prepare("test", col_set="label", data_key=DataHandlerLP.DK_I)
@@ -219,7 +227,7 @@ def main() -> int:
         args.provider_uri, args.train_start, args.train_end, args.valid_start,
         args.valid_end, args.test_start, args.test_end, args.output_dir,
         args.top_k, args.cost_bps)
-    print(json.dumps(metrics, indent=2, allow_nan=True))
+    print(json.dumps(_json_safe_metrics(metrics), indent=2, allow_nan=False))
     return 0
 
 if __name__ == "__main__":
