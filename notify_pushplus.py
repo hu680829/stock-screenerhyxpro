@@ -57,6 +57,44 @@ def build_message(csv_path: str | Path) -> tuple[str, str]:
     return title, "\n".join(lines)
 
 
+def append_portfolio_snapshot(message: str, snapshot_path: str | Path = "reports/portfolio_snapshot.json") -> str:
+    """Append a portfolio status section if the monitor produced a report."""
+    path = Path(snapshot_path)
+    if not path.is_file():
+        return message
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return message + "\\n<p><b>持仓监控：</b>报告无法读取，请检查 GitHub Actions 日志。</p>"
+    if snapshot.get("status") != "ok":
+        error = html.escape(str(snapshot.get("error", "数据不可用")))
+        return message + f"\\n<h3>持仓风险监控</h3><p><b>数据暂不可用：</b>{error}。本次不计算持仓收益或再平衡建议。</p>"
+    lines = [
+        "\\n<h3>持仓风险监控（非交易指令）</h3>",
+        f"<p>共同交易日：{html.escape(str(snapshot.get('previous_session')))} → {html.escape(str(snapshot.get('latest_session')))}</p>",
+        f"<p>按人民币计价组合区间收益：{float(snapshot['portfolio_return'])*100:.2f}%</p>",
+        f"<p>USD/CNH 区间变化：{float(snapshot['usd_cnh_return'])*100:.2f}%</p>",
+        "<table border='1' cellpadding='6' cellspacing='0'><tr><th>标的</th><th>目标权重</th><th>当前权重</th><th>偏离（百分点）</th></tr>",
+    ]
+    for ticker, target in snapshot["target_weights"].items():
+        current = snapshot["current_weights"][ticker]
+        drift = snapshot["drift_pp"][ticker]
+        lines.append(
+            f"<tr><td>{html.escape(str(ticker))}</td>"
+            f"<td>{target*100:.2f}%</td><td>{current*100:.2f}%</td>"
+            f"<td>{drift:+.2f}</td></tr>"
+        )
+    lines.append("</table>")
+    alerts = snapshot.get("rebalance_alerts") or {}
+    if alerts:
+        lines.append("<p><b>权重偏离达到再平衡死区：</b>" +
+                     html.escape(", ".join(f"{k} ({v:+.2f}pp)" for k, v in alerts.items())) +
+                     "。请人工核验后再决定是否调整。</p>")
+    else:
+        lines.append("<p>当前没有标的达到再平衡偏离阈值。</p>")
+    return message + "\\n" + "\\n".join(lines)
+
+
 def send_pushplus(token: str, title: str, content: str, timeout: int = 20) -> dict:
     payload = json.dumps({
         "token": token,
