@@ -35,3 +35,30 @@ The composite score is a relative ranking within the symbols downloaded for the 
 - It places no trades and does not promise returns.
 - Yahoo Finance data can be delayed, adjusted, missing, or rate-limited; check source data before decisions.
 - A score is not a backtest. Before live use, add transaction costs, survivorship-bias controls, point-in-time data, walk-forward testing, and benchmark comparisons.
+
+
+## Experimental historical backtest
+
+A simple long-only walk-forward backtest is available in `backtest.py`. It ranks
+trailing lookback momentum, rebalances periodically, applies a one-row signal lag,
+and deducts configurable turnover costs. Example:
+
+```python
+import yfinance as yf
+from backtest import run_backtest
+
+symbols = ["AAPL", "MSFT", "NVDA", "SPY"]
+raw = yf.download(symbols, period="5y", auto_adjust=True, progress=False)
+prices = raw["Close"] if hasattr(raw.columns, "levels") else raw[["Close"]]
+returns, metrics = run_backtest(prices, lookback=120, top_n=3,
+                                 rebalance_every=21, cost_bps=10,
+                                 benchmark="SPY")
+print(metrics)
+returns.to_csv("reports/backtest_daily_returns.csv")
+```
+
+**Limitations:** this is an initial research harness, not proof of an edge. It does
+not yet model delisted securities, point-in-time universe membership, taxes, market
+impact, or survivorship bias. Validate across multiple market regimes and compare
+against buy-and-hold before relying on any result. Historical performance does not
+predict future returns.
