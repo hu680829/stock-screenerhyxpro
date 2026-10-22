@@ -43,10 +43,13 @@ def calculate_factors(history: pd.DataFrame) -> dict:
         # can otherwise compare different sessions when either series has gaps.
         volume = pd.to_numeric(history["Volume"], errors="coerce")
         volume = volume[~volume.index.duplicated(keep="last")].sort_index()
-        volume = volume.reindex(close.index).dropna()
-        volume = volume[np.isfinite(volume.to_numpy(dtype=float)) & (volume >= 0)]
-        if len(volume) >= 60:
-            mean20, mean60 = float(volume.tail(20).mean()), float(volume.tail(60).mean())
+        volume = volume.reindex(close.index)
+        volume = volume.where(np.isfinite(volume) & volume.ge(0))
+        v20, v60 = volume.tail(20), volume.tail(60)
+        # Require 75% session coverage in each window; do not silently extend a
+        # window backward just because recent volume observations are missing.
+        if v20.notna().sum() >= 15 and v60.notna().sum() >= 45:
+            mean20, mean60 = float(v20.mean()), float(v60.mean())
             if mean60 > 0:
                 volume_ratio = mean20 / mean60
     return {
