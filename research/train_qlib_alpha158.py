@@ -93,6 +93,23 @@ def _build_daily_portfolio(observations: pd.DataFrame, top_k: int,
     return pd.DataFrame(daily_rows).set_index("date").sort_index()
 
 
+
+def _cost_sensitivity(observations: pd.DataFrame, top_k: int,
+                      cost_bps_values: list[float]) -> pd.DataFrame:
+    """Re-score the same OOS predictions under several transaction-cost assumptions."""
+    if not cost_bps_values:
+        raise ValueError("at least one cost scenario is required")
+    scenarios = sorted({float(value) for value in cost_bps_values})
+    if any(not np.isfinite(value) or value < 0 for value in scenarios):
+        raise ValueError("cost scenarios must be finite and non-negative")
+    rows = []
+    for bps in scenarios:
+        daily = _build_daily_portfolio(observations, top_k=top_k, cost_bps=bps)
+        metrics = _daily_metrics(daily, bps)
+        rows.append(metrics)
+    return pd.DataFrame(rows).sort_values("cost_bps_per_traded_notional").reset_index(drop=True)
+
+
 def run_experiment(provider_uri: str, train_start: str, train_end: str,
                    valid_start: str, valid_end: str, test_start: str, test_end: str,
                    output_dir: str = "reports/qlib_oos", top_k: int = 10,
@@ -165,6 +182,8 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
 
     daily = _build_daily_portfolio(observations, top_k, cost_bps)
     metrics = _daily_metrics(daily, cost_bps)
+    sensitivity_costs = sorted({0.0, 5.0, 10.0, 20.0, 30.0, float(cost_bps)})
+    sensitivity = _cost_sensitivity(observations, top_k, sensitivity_costs)
     daily_ic = []
     for _, group in observations.groupby("date", sort=True):
         if len(group) >= 5:
@@ -180,6 +199,7 @@ def run_experiment(provider_uri: str, train_start: str, train_end: str,
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     daily.to_csv(output / "oos_daily_returns.csv")
+    sensitivity.to_csv(output / "oos_cost_sensitivity.csv", index=False)
     observations.to_csv(output / "oos_predictions_and_labels.csv", index=False)
     (output / "oos_metrics.json").write_text(
         json.dumps(metrics, indent=2, allow_nan=True) + "\n", encoding="utf-8")
