@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 LOGGER = logging.getLogger("quant_engine")
+MIN_FACTOR_COVERAGE = 0.70
 DEFAULT_TICKERS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "AVGO", "AMD", "TSM", "SPY"]
 
 def _close_series(history: pd.DataFrame) -> pd.Series:
@@ -94,9 +95,13 @@ def rank_universe(factors: pd.DataFrame) -> pd.DataFrame:
     ret20 = pd.to_numeric(out["return_20d"], errors="coerce")
     ret120 = pd.to_numeric(out["return_120d"], errors="coerce")
     above50 = out["above_sma50"].astype("boolean").fillna(False).astype(bool)
-    out["risk_pass"] = (dd.notna() & dd.ge(-.35) & vol.notna() & vol.le(1.0)
+    # Fail closed when the ranking is based on too few available factors.
+    # This avoids short-history symbols ranking highly from a partial score.
+    coverage = pd.to_numeric(out["factor_coverage"], errors="coerce")
+    out["risk_pass"] = (coverage.ge(MIN_FACTOR_COVERAGE) & coverage.notna()
+                        & dd.notna() & dd.ge(-.35) & vol.notna() & vol.le(1.0)
                         & above50 & ret20.notna() & ret20.gt(-.15)
-                        & out["composite_score"].notna())
+                        & ret120.notna() & out["composite_score"].notna())
     out["recommendation"] = np.where(out["risk_pass"], "REVIEW", "RISK_FILTERED")
     out = out.sort_values(["risk_pass", "composite_score"], ascending=[False, False], na_position="last")
     out.insert(0, "rank", range(1, len(out) + 1))
