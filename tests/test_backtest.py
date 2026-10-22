@@ -27,19 +27,19 @@ class BacktestTests(unittest.TestCase):
 
     def test_scheduled_rebalance_with_no_valid_candidates_clears_old_holdings(self):
         idx = pd.date_range("2020-01-01", periods=12, freq="B")
-        # AAA is eligible at the first rebalance, then has a missing price at
-        # the next scheduled rebalance so its momentum score is unavailable.
+        # A gap makes momentum unavailable on the scheduled rebalance at idx[10],
+        # while prices recover afterward so stale exposure would create returns.
         prices = pd.DataFrame({
-            "AAA": [10, 11, 12, 13, 14, 15, 16, np.nan, np.nan, np.nan, np.nan, np.nan],
-            "BBB": [10, 10.5, 11, 11.5, 12, 12.5, 13, np.nan, np.nan, np.nan, np.nan, np.nan],
+            "AAA": [10, 11, 12, 13, 14, 15, 16, 17, np.nan, 19, 20, 21],
+            "BBB": [10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, np.nan, 15, 16, 17],
         }, index=idx)
         result, _ = run_backtest(
-            prices, lookback=2, top_n=1, rebalance_every=3,
+            prices, lookback=2, top_n=1, rebalance_every=4,
             cost_bps=0, benchmark="SPY"
         )
-        # The second scheduled rebalance has no eligible momentum observations;
-        # returns after that point must not keep earning stale AAA/BBB exposure.
-        self.assertTrue((result.loc[idx[7]:, "gross_return"] == 0.0).all())
+        # The scheduled rebalance at idx[10] has no valid momentum scores.
+        # Holdings are cleared at close idx[10], so idx[11] earns no exposure.
+        self.assertEqual(result.loc[idx[11], "gross_return"], 0.0)
 
     def test_rejects_invalid_cost(self):
         prices = pd.DataFrame({"AAA": [10, 11, 12, 13]})
