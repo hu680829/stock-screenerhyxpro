@@ -3,7 +3,8 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: "30 22 * * 1-5"
+    # GitHub Actions cron is UTC. 22:30 UTC Sunday-Thursday = 06:30 Beijing Monday-Friday.
+    - cron: "30 22 * * 0-4"
 permissions:
   contents: read
 jobs:
