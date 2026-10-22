@@ -34,6 +34,13 @@ class BacktestTests(unittest.TestCase):
         # After a later scheduled rebalance with no eligible names, there is no stale exposure.
         self.assertTrue((result["gross_return"].iloc[230:] == 0).all())
 
+    def test_missing_return_for_held_asset_fails_closed(self):
+        prices = self.prices(260)
+        # Make a selected asset's price unavailable after it has become eligible.
+        prices.iloc[205, prices.columns.get_loc("AAPL")] = np.nan
+        with self.assertRaisesRegex(ValueError, "missing daily return for held asset"):
+            run_backtest(prices, top_n=1, rebalance_every=5, cost_bps=0, benchmark="SPY")
+
     def test_rejects_invalid_cost(self):
         with self.assertRaises(ValueError):
             run_backtest(self.prices(250), cost_bps=-1)
