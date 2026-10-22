@@ -40,8 +40,7 @@ def calculate_snapshot(close_prices: pd.DataFrame, target_weights: Mapping[str, 
     data = close_prices[list(required)].copy()
     data = data.apply(pd.to_numeric, errors="coerce")
     data = data.where(data > 0)
-    data = data.sort_index()
-    # Require all holdings and FX on the same two observations; do not silently
+    # Providers or merged datasets can contain repeated session labels. Keep the\n    # last observation per session so the "previous" and "latest" rows are distinct.\n    data = data.loc[~data.index.duplicated(keep="last")].sort_index()\n    # Require all holdings and FX on the same two observations; do not silently
     # substitute another date or calculate a partial portfolio.
     shared = data.dropna(subset=list(required))
     if len(shared) < 2:
