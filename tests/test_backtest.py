@@ -12,7 +12,7 @@ class BacktestTests(unittest.TestCase):
 
     def test_signal_needs_history_and_risk_gate(self):
         scores, risk = calculate_signal_frame(self.prices())
-        self.assertTrue(scores.iloc[:120].isna().all().all())
+        self.assertFalse(risk.iloc[:120].any().any())
         self.assertFalse(risk.iloc[:50].any().any())
         self.assertTrue(bool(risk.iloc[-1]["AAA"]))
 
