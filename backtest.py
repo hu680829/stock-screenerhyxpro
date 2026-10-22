@@ -18,7 +18,7 @@ def _pct(row: pd.Series, higher: bool = True) -> pd.Series:
 
 def calculate_signal_frame(prices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Calculate close-t scores and risk gate from trailing data only."""
-    px = prices.apply(pd.to_numeric, errors="coerce").copy()
+    px = prices.apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan).copy()
     px = px.loc[~px.index.duplicated(keep="last")].sort_index().dropna(axis=1, how="all")
     if px.empty:
         raise ValueError("prices must contain at least one usable ticker")
@@ -89,6 +89,16 @@ def run_backtest(prices: pd.DataFrame, lookback: int | None = None, top_n: int =
         holdings.iloc[i] = last
     held = holdings.shift(1).fillna(0.0)
     daily_returns = px.pct_change(fill_method=None).replace([np.inf, -np.inf], np.nan)
+    # Fail closed instead of treating a missing held-asset return as a zero return.
+    missing_held_returns = held.gt(0) & daily_returns.isna()
+    if missing_held_returns.any().any():
+        row_pos, col_pos = np.argwhere(missing_held_returns.to_numpy())[0]
+        missing_date = missing_held_returns.index[row_pos]
+        missing_ticker = missing_held_returns.columns[col_pos]
+        raise ValueError(
+            f"missing daily return for held asset {missing_ticker!r} on {missing_date}; "
+            "repair/align the price data before backtesting"
+        )
     gross = (held * daily_returns.fillna(0.0)).sum(axis=1)
     turnover = holdings.diff().abs().sum(axis=1).fillna(0.0)
     if len(turnover):
