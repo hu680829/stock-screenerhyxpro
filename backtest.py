@@ -50,7 +50,7 @@ def calculate_signal_frame(prices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
                         & vol20.iloc[i].le(1.0) & vol20.iloc[i].notna()
                         & px.iloc[i].gt(sma50.iloc[i]) & sma50.iloc[i].notna()
                         & mom20.iloc[i].gt(-.15) & mom20.iloc[i].notna()
-                        & scores.iloc[i].notna()).fillna(False)
+                        & mom120.iloc[i].notna() & scores.iloc[i].notna()).fillna(False)
     return scores, risk
 
 def run_backtest(prices: pd.DataFrame, lookback: int | None = None, top_n: int = 3,
