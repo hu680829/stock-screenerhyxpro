@@ -22,24 +22,30 @@ def evaluate_factor(
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     """Evaluate a cross-sectional factor using daily rank IC and top-bottom spread.
 
-    Each row is one security at one signal date. ``forward_return`` must represent
+    Each row is one security at one signal date. forward_return must represent
     a future holding-period return, not a same-day return. Duplicate date/ticker
     observations are rejected to avoid silently overweighting securities.
     """
-    required = {date_col, ticker_col, factor_col, forward_return_col}
-    missing = required - set(observations.columns)
+    required = [date_col, ticker_col, factor_col, forward_return_col]
+    missing = set(required) - set(observations.columns)
     if missing:
         raise ValueError(f"missing required columns: {sorted(missing)}")
     if min_cross_section < 3:
         raise ValueError("min_cross_section must be at least 3")
-    data = observations[list(required)].copy()
-    if data.duplicated([date_col, ticker_col]).any():
-        raise ValueError("duplicate date/ticker observations are not allowed")
+
+    # Preserve deterministic column order and normalize keys before checking
+    # duplicates, including equivalent dates represented by mixed input types.
+    data = observations[required].copy()
+    data[date_col] = pd.to_datetime(data[date_col], errors="coerce")
+    data[ticker_col] = data[ticker_col].astype("string").str.strip()
     data[factor_col] = pd.to_numeric(data[factor_col], errors="coerce")
     data[forward_return_col] = pd.to_numeric(data[forward_return_col], errors="coerce")
     data = data.replace([np.inf, -np.inf], np.nan).dropna(
         subset=[date_col, ticker_col, factor_col, forward_return_col]
     )
+    data = data[data[ticker_col].ne("")]
+    if data.duplicated([date_col, ticker_col]).any():
+        raise ValueError("duplicate date/ticker observations are not allowed")
 
     rows: list[dict[str, object]] = []
     for date, group in data.groupby(date_col, sort=True):
