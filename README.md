@@ -39,17 +39,26 @@ The composite score is a relative ranking within the symbols downloaded for the 
 
 ## Experimental historical backtest
 
-A simple long-only walk-forward backtest is available in `backtest.py`. It ranks
+A simple long-only walk-forward **momentum prototype** is available in `backtest.py`.
+It does not yet backtest the screener's full composite multi-factor score. It ranks
 trailing lookback momentum, rebalances periodically, applies a one-row signal lag,
-and deducts configurable turnover costs. Example:
+clears holdings to cash if a scheduled rebalance has no eligible candidates, and
+deducts configurable turnover costs. Example:
 
 ```python
+import pandas as pd
 import yfinance as yf
 from backtest import run_backtest
 
 symbols = ["AAPL", "MSFT", "NVDA", "SPY"]
 raw = yf.download(symbols, period="5y", auto_adjust=True, progress=False)
-prices = raw["Close"] if hasattr(raw.columns, "levels") else raw[["Close"]]
+if raw.empty:
+    raise RuntimeError("Yahoo Finance returned no historical data")
+if isinstance(raw.columns, pd.MultiIndex):
+    prices = raw["Close"]
+else:
+    # Fallback for single-ticker downloads that return flat columns.
+    prices = raw[["Close"]].rename(columns={"Close": symbols[0]})
 returns, metrics = run_backtest(prices, lookback=120, top_n=3,
                                  rebalance_every=21, cost_bps=10,
                                  benchmark="SPY")
