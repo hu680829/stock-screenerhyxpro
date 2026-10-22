@@ -55,6 +55,23 @@ class PushPlusNotificationTests(unittest.TestCase):
             self.assertIn("数据暂不可用", body)
             self.assertIn("missing shared sessions", body)
 
+    @patch("notify_pushplus.send_pushplus")
+    @patch("notify_pushplus.append_portfolio_snapshot")
+    @patch.dict("os.environ", {"PUSHPLUS_TOKEN": "test-token"})
+    @patch("sys.argv", ["notify_pushplus.py", "ranking.csv"])
+    def test_main_includes_portfolio_snapshot_before_sending(
+        self, mocked_append, mocked_send
+    ):
+        mocked_append.return_value = "<p>rankings + portfolio</p>"
+        mocked_send.return_value = {"code": "200"}
+        with patch("notify_pushplus.build_message", return_value=("title", "<p>rankings</p>")):
+            result = notify_pushplus.main()
+        self.assertEqual(result, 0)
+        mocked_append.assert_called_once_with("<p>rankings</p>")
+        mocked_send.assert_called_once_with(
+            "test-token", "title", "<p>rankings + portfolio</p>"
+        )
+
     @patch("notify_pushplus.urlopen")
     def test_pushplus_api_rejection_raises(self, mocked_urlopen):
         response = MagicMock()
