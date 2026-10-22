@@ -124,6 +124,14 @@ class QlibResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate date/ticker"):
             _build_daily_portfolio(observations, top_k=1, cost_bps=10.0)
 
+    def test_portfolio_rejects_duplicate_tickers_after_normalization(self):
+        observations = pd.DataFrame([
+            {"date": "2024-01-02", "ticker": "AAA", "factor": 2.0, "forward_return": 0.02},
+            {"date": "2024-01-02", "ticker": " AAA ", "factor": 1.0, "forward_return": 0.01},
+        ])
+        with self.assertRaisesRegex(ValueError, "duplicate date/ticker"):
+            _build_daily_portfolio(observations, top_k=1, cost_bps=10.0)
+
     def test_portfolio_rejects_empty_usable_rows(self):
         observations = pd.DataFrame([
             {"date": "2024-01-02", "ticker": "AAA", "factor": float("nan"), "forward_return": 0.02},
